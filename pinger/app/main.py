@@ -124,18 +124,22 @@ async def probe_http(endpoint: Endpoint, client: httpx.AsyncClient) -> PingSampl
 
 
 async def probe_icmp(endpoint: Endpoint) -> PingSample:
-    started = time.perf_counter_ns()
     now = datetime.now(timezone.utc)
     parsed = urlparse(endpoint.url)
     target = parsed.hostname if parsed.scheme else endpoint.url
     try:
         process = await asyncio.create_subprocess_exec(
             "ping", "-n", "-c", "1", "-W", str(max(1, math.ceil(TIMEOUT))), target,
-            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
-        _, stderr = await process.communicate()
+        stdout, stderr = await process.communicate()
         if process.returncode == 0:
-            return PingSample(endpoint_id=endpoint.id, recorded_at=now, latency_ms=(time.perf_counter_ns() - started) / 1_000_000)
+            output = stdout.decode(errors="replace")
+            match = re.search(r"time[=<]\s*([0-9]+(?:[.,][0-9]+)?)\s*ms", output, re.IGNORECASE)
+            if match:
+                # Use ping's packet RTT, excluding Docker process/scheduling overhead.
+                return PingSample(endpoint_id=endpoint.id, recorded_at=now, latency_ms=float(match.group(1).replace(",", ".")))
+            return PingSample(endpoint_id=endpoint.id, recorded_at=now, error="ICMP reply received but ping did not report an RTT")
         error = stderr.decode(errors="replace").strip()[:500] or "ICMP ping failed"
         return PingSample(endpoint_id=endpoint.id, recorded_at=now, error=error)
     except OSError as exc:

@@ -7,7 +7,7 @@ Pinger continuously measures HTTP(S) endpoint reachability and end-to-end reques
 Each endpoint can use one of two probe types:
 
 - **HTTP(S) request** measures the full request from the Docker host: DNS resolution, TCP/TLS connection, request, and response. A responding endpoint with an HTTP 404 is reachable, but is labeled **HTTP response**.
-- **ICMP ping** sends one network ping to a hostname or IP address and records the round-trip time. A hostname or IP is recommended; if an existing HTTP(S) URL is retained when switching probe types, Pinger extracts its hostname internally for the ping.
+- **ICMP ping** sends one network ping to a hostname or IP address and records the packet round-trip time reported by `ping` itself (not container/process startup time). A hostname or IP is recommended; if an existing HTTP(S) URL is retained when switching probe types, Pinger extracts its hostname internally for the ping.
 
 A transport failure, ICMP failure, or timeout is labeled **Down**.
 
