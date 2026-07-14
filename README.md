@@ -7,7 +7,7 @@ Pinger continuously measures HTTP(S) endpoint reachability and end-to-end reques
 Each endpoint can use one of two probe types:
 
 - **HTTP(S) request** measures the full request from the Docker host: DNS resolution, TCP/TLS connection, request, and response. A responding endpoint with an HTTP 404 is reachable, but is labeled **HTTP response**.
-- **ICMP ping** sends one network ping to a hostname or IP address and records the round-trip time. Use an IP address or hostname only—do not include `http://` or a path.
+- **ICMP ping** sends one network ping to a hostname or IP address and records the round-trip time. A hostname or IP is recommended; if an existing HTTP(S) URL is retained when switching probe types, Pinger extracts its hostname internally for the ping.
 
 A transport failure, ICMP failure, or timeout is labeled **Down**.
 
@@ -65,7 +65,11 @@ Use the endpoint manager to:
 - Move endpoints up or down; this also controls legend ordering.
 - Remove an endpoint from active probing while retaining its historical samples.
 
-The manager uses one **Save all changes** button, so name, target, type, and enabled-state edits across multiple rows are saved together without row-level refreshes clearing other pending edits. Moving or removing an endpoint saves pending edits first. It refreshes displayed health and latency every `STATUS_REFRESH_SECONDS` without overwriting in-progress edits, and includes a local clock plus an **Open dashboard** link that follows the configured `GRAFANA_PORT`.
+The manager uses one **Save all changes** button, so name, target, type, and enabled-state edits across multiple rows are saved together without row-level refreshes clearing other pending edits. Moving or removing an endpoint saves pending edits first. Switching probe types never rewrites the target field, so `http://` and `https://` are preserved when switching back to an HTTP(S) probe.
+
+The manager validates names and targets before saving. Invalid fields receive a red outline and a warning icon with a hoverable explanation; attempting to save also shows the same message at the top. Validation covers required fields, duplicate names, valid HTTP(S) URL schemes, and valid ICMP hosts/URLs. Clearing both fields in the Add endpoint form clears its pending validation warnings.
+
+The manager refreshes displayed health and latency every `STATUS_REFRESH_SECONDS` without overwriting in-progress edits, and includes a local clock plus an **Open dashboard** link that follows the configured `GRAFANA_PORT`.
 
 ## Dashboard behavior
 
@@ -115,7 +119,7 @@ docker compose up -d
 | `DELETE` | `/endpoints/{id}` | Stop active probing while retaining history |
 | `GET` | `/health` | Service and database health |
 
-HTTP probes accept only absolute `http://` and `https://` URLs. ICMP probes accept hostnames or IP addresses.
+HTTP probes accept only absolute `http://` and `https://` URLs. ICMP probes accept hostnames or IP addresses; stored HTTP(S) URLs are also accepted and ping their hostname.
 
 ## Persistence and startup
 
