@@ -1,0 +1,87 @@
+{
+  "uid": "endpoint-latency",
+  "title": "Endpoint latency",
+  "timezone": "browser",
+  "time": { "from": "now-15m", "to": "now" },
+  "refresh": "5s",
+  "links": [
+    {
+      "title": "Manage endpoints",
+      "type": "link",
+      "url": "http://localhost:8080/manage",
+      "targetBlank": false,
+      "icon": "external link"
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 15,
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "End-to-end HTTP latency",
+      "datasource": { "type": "postgres", "uid": "pinger-postgres" },
+      "targets": [{
+        "format": "time_series",
+        "rawSql": "SELECT s.recorded_at AS time, s.latency_ms AS value, e.name || ' — ' || CASE WHEN s.status_code >= 500 THEN 'Server error (' || s.status_code || ')' WHEN s.status_code >= 400 THEN 'HTTP response (' || s.status_code || ')' ELSE 'Reached (' || COALESCE(s.status_code::text, 'unknown') || ')' END AS metric FROM ping_samples s JOIN endpoints e ON e.id = s.endpoint_id WHERE $__timeFilter(s.recorded_at) AND s.latency_ms IS NOT NULL ORDER BY 1, e.sort_order, e.name",
+        "refId": "A"
+      }, {
+        "format": "time_series",
+        "rawSql": "SELECT s.recorded_at AS time, -50.0 AS value, e.name || ' — Down (not reached)' AS metric FROM ping_samples s JOIN endpoints e ON e.id = s.endpoint_id WHERE $__timeFilter(s.recorded_at) AND s.error IS NOT NULL ORDER BY 1, e.sort_order, e.name",
+        "refId": "C"
+      }],
+      "fieldConfig": { "defaults": { "unit": "ms", "decimals": 2, "min": -100, "color": { "mode": "palette-classic" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0 }] }, "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "showPoints": "never", "fillOpacity": 0, "spanNulls": true, "thresholdsStyle": { "mode": "area" } } }, "overrides": [
+        { "matcher": { "id": "byRegexp", "options": " — Down \\(not reached\\)$" }, "properties": [
+          { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }, { "id": "custom.drawStyle", "value": "points" }, { "id": "custom.lineWidth", "value": 0 }, { "id": "custom.showPoints", "value": "always" }, { "id": "custom.pointSize", "value": 9 }
+        ] }
+      ] },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc", "hideZeros": false }, "legend": { "displayMode": "list", "placement": "right", "showLegend": true } },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Latest successful latency",
+      "datasource": { "type": "postgres", "uid": "pinger-postgres" },
+      "targets": [{
+        "format": "table",
+        "rawSql": "SELECT DISTINCT ON (e.id) e.name AS endpoint, s.latency_ms AS latency_ms, s.recorded_at AS time FROM endpoints e JOIN ping_samples s ON s.endpoint_id = e.id WHERE s.latency_ms IS NOT NULL ORDER BY e.id, s.recorded_at DESC",
+        "refId": "A"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "value" },
+      "fieldConfig": { "defaults": { "unit": "ms", "decimals": 2, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 250 }, { "color": "red", "value": 1000 }] } }, "overrides": [] },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 12 }
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Recent errors",
+      "datasource": { "type": "postgres", "uid": "pinger-postgres" },
+      "targets": [{
+        "format": "table",
+        "rawSql": "SELECT s.recorded_at AS time, e.name AS endpoint, s.error, s.status_code FROM ping_samples s JOIN endpoints e ON e.id=s.endpoint_id WHERE $__timeFilter(s.recorded_at) AND (s.error IS NOT NULL OR s.status_code >= 400) ORDER BY s.recorded_at DESC LIMIT 100",
+        "refId": "A"
+      }],
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 12 }
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "Latest probe from every endpoint",
+      "datasource": { "type": "postgres", "uid": "pinger-postgres" },
+      "targets": [{
+        "format": "table",
+        "rawSql": "SELECT e.name AS endpoint, CASE WHEN s.id IS NULL THEN 'No data' WHEN s.error IS NOT NULL THEN 'Down' WHEN s.status_code >= 500 THEN 'Server error' WHEN s.status_code >= 400 THEN 'HTTP response' ELSE 'Healthy' END AS health, s.latency_ms, s.status_code, s.recorded_at AS last_ping, s.error FROM endpoints e LEFT JOIN LATERAL (SELECT * FROM ping_samples WHERE endpoint_id=e.id ORDER BY recorded_at DESC LIMIT 1) s ON TRUE ORDER BY e.sort_order, e.name",
+        "refId": "A"
+      }],
+      "fieldConfig": { "defaults": { "custom": { "cellOptions": { "type": "auto" } } }, "overrides": [
+        { "matcher": { "id": "byName", "options": "health" }, "properties": [
+          { "id": "mappings", "value": [ { "type": "value", "options": { "Healthy": { "color": "green", "index": 0, "text": "Healthy" }, "HTTP response": { "color": "orange", "index": 1, "text": "HTTP response" }, "Server error": { "color": "red", "index": 2, "text": "Server error" }, "Down": { "color": "red", "index": 3, "text": "Down" }, "No data": { "color": "gray", "index": 4, "text": "No data" } } } ] },
+          { "id": "custom.cellOptions", "value": { "type": "color-background" } }
+        ] },
+        { "matcher": { "id": "byName", "options": "latency_ms" }, "properties": [ { "id": "unit", "value": "ms" }, { "id": "decimals", "value": 2 } ] }
+      ] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 18 }
+    }
+  ]
+}

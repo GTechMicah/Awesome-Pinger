@@ -1,0 +1,17 @@
+apiVersion: 1
+datasources:
+  - name: Pinger PostgreSQL
+    uid: pinger-postgres
+    type: postgres
+    access: proxy
+    url: db:5432
+    user: pinger
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD}
+    jsonData:
+      database: pinger
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+    isDefault: true
+    editable: false

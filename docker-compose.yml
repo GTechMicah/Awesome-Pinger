@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pinger
+      POSTGRES_USER: pinger
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-before-production}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pinger -d pinger"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  pinger:
+    build: ./pinger
+    environment:
+      DATABASE_URL: postgresql+asyncpg://pinger:${POSTGRES_PASSWORD:-change-me-before-production}@db:5432/pinger
+      PING_INTERVAL_SECONDS: ${PING_INTERVAL_SECONDS:-5}
+      REQUEST_TIMEOUT_SECONDS: ${REQUEST_TIMEOUT_SECONDS:-10}
+      STATUS_REFRESH_SECONDS: ${STATUS_REFRESH_SECONDS:-5}
+      ENDPOINTS_FILE: /config/endpoints.json
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${PINGER_PORT:-8080}:8080"
+    volumes:
+      - ./config/endpoints.json:/config/endpoints.json:ro
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-before-production}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin-change-me}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  grafana_data:

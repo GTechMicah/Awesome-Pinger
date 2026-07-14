@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Google connectivity",
+    "url": "https://www.google.com/generate_204",
+    "enabled": true
+  },
+  {
+    "name": "Cloudflare trace",
+    "url": "https://www.cloudflare.com/cdn-cgi/trace",
+    "enabled": true
+  },
+  {
+    "name": "Mozilla connectivity",
+    "url": "https://detectportal.firefox.com/success.txt",
+    "enabled": true
+  },
+  {
+    "name": "Microsoft connectivity",
+    "url": "http://www.msftconnecttest.com/connecttest.txt",
+    "enabled": true
+  }
+]
