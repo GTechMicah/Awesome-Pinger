@@ -1,39 +1,131 @@
 # Pinger
 
-Continuously measures HTTP(S) endpoint availability and end-to-end request latency, stores each sample in PostgreSQL, and visualizes the results in Grafana.
+Pinger continuously measures HTTP(S) endpoint reachability and end-to-end request latency. It stores samples in PostgreSQL and visualizes live and historical results in Grafana.
 
-## Start
+## What it measures
 
-1. Copy `.env.example` to `.env` and set strong passwords.
-2. Edit `config/endpoints.json` to seed endpoints on startup, if desired. Each entry has `name`, `url`, and optional `enabled` fields.
-3. Run `docker compose up --build -d`.
-4. Add or change endpoints through the API (or use the built-in docs at `http://localhost:8080/docs`):
+This is an HTTP(S) probe, not an ICMP ping. Each sample measures the full request from the Docker host: DNS resolution, TCP/TLS connection, request, and response. A responding endpoint with an HTTP 404 is reachable, but is labeled **HTTP response**; a transport failure or timeout is labeled **Down**.
+
+## Quick start
+
+1. Install Docker Desktop.
+2. Copy `.env.example` to `.env` and set strong passwords.
+3. Optionally edit `config/endpoints.json` to choose first-run defaults.
+4. Start the stack:
+
+   ```powershell
+   docker compose up --build -d
+   ```
+
+5. Open:
+
+   | Service | URL |
+   | --- | --- |
+   | Grafana dashboard | `http://localhost:3000/d/endpoint-latency/endpoint-latency` |
+   | Endpoint manager | `http://localhost:8080/manage` |
+   | API documentation | `http://localhost:8080/docs` |
+
+Grafana credentials come from `.env`.
+
+## Default endpoints
+
+`config/endpoints.json` includes lightweight public connectivity endpoints:
+
+- Google connectivity: `https://www.google.com/generate_204`
+- Cloudflare trace: `https://www.cloudflare.com/cdn-cgi/trace`
+- Mozilla connectivity: `https://detectportal.firefox.com/success.txt`
+- Microsoft connectivity: `http://www.msftconnecttest.com/connecttest.txt`
+
+The config file **seeds missing endpoint names** on service startup. It never overwrites an existing endpoint with the same name, so edits made in the endpoint manager persist. Removing an entry from the config does not delete historical/user-managed endpoints from PostgreSQL.
+
+## Managing endpoints
+
+Use the endpoint manager to:
+
+- Add endpoints.
+- Edit endpoint names and URLs.
+- Enable or disable probes.
+- Move endpoints up or down; this also controls legend ordering.
+- Remove an endpoint from active probing while retaining its historical samples.
+
+The manager refreshes displayed health and latency every `STATUS_REFRESH_SECONDS` without overwriting in-progress name or URL edits. It includes a local clock and a link to the Grafana dashboard.
+
+## Dashboard behavior
+
+- The main graph defaults to the last 15 minutes and refreshes every 5 seconds.
+- Successful probes display as continuous latency lines.
+- Transport failures appear as red markers in a reserved negative region; the negative values are visual indicators, not measured latency.
+- Hovering the graph shows latency, reachability, and HTTP status at that time, sorted from highest latency to lowest.
+- The right-side legend follows the saved endpoint-manager order.
+- The **Latest probe from every endpoint** table shows the newest probe, latency, status code, timestamp, and error for each endpoint.
+
+Health colors:
+
+| Status | Meaning |
+| --- | --- |
+| Green — Healthy | Successful HTTP response below 400 |
+| Orange — HTTP response | Endpoint was reached but returned HTTP 4xx |
+| Red — Server error / Down | HTTP 5xx response, or no HTTP response due to a transport failure/timeout |
+| Gray — No data | No probe has been saved yet |
+
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `POSTGRES_PASSWORD` | required | PostgreSQL password |
+| `GRAFANA_ADMIN_USER` | `admin` | Grafana administrator user |
+| `GRAFANA_ADMIN_PASSWORD` | required | Grafana administrator password |
+| `PING_INTERVAL_SECONDS` | `5` | Delay after each completed probe sweep |
+| `REQUEST_TIMEOUT_SECONDS` | `10` | Per-request HTTP timeout |
+| `STATUS_REFRESH_SECONDS` | `5` | Endpoint-manager health refresh interval |
+| `PINGER_PORT` | `8080` | Host port for the API and manager |
+| `GRAFANA_PORT` | `3000` | Host port for Grafana |
+
+After changing `.env`, run:
 
 ```powershell
-Invoke-RestMethod http://localhost:8080/endpoints -Method Post -ContentType 'application/json' -Body '{"name":"Cloudflare","url":"https://1.1.1.1/cdn-cgi/trace"}'
+docker compose up -d
 ```
 
-5. Open Grafana at `http://localhost:3000` and use the **Endpoint latency** dashboard. Login credentials come from `.env`.
-
-The dashboard uses continuous straight latency lines and includes a color-coded latest-probe table for every endpoint. Failed transport checks are shown as red points below zero, within a reserved red threshold band; HTTP status errors remain visible as latency measurements because the host did respond. The **Manage endpoints** link lets you add endpoints, edit URLs, move endpoints up or down, disable them, or remove them; changes save immediately to PostgreSQL and survive container restarts.
-
-## Endpoint API
+## API
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/endpoints` | List active endpoints |
-| `POST` | `/endpoints` | Add endpoint: `{ "name": "...", "url": "https://..." }` |
+| `GET` | `/endpoints` | List endpoints, latest status, and ordering |
+| `POST` | `/endpoints` | Add `{ "name": "...", "url": "https://..." }` |
 | `PATCH` | `/endpoints/{id}` | Update name, URL, or enabled state |
-| `DELETE` | `/endpoints/{id}` | Stop probing (historical samples remain) |
-| `GET` | `/health` | Service/database health |
+| `POST` | `/endpoints/{id}/move` | Reorder with `{ "direction": "up" }` or `down` |
+| `DELETE` | `/endpoints/{id}` | Stop active probing while retaining history |
+| `GET` | `/health` | Service and database health |
 
-Only `http://` and `https://` URLs are accepted. Latency is measured with Python's monotonic high-resolution clock around the whole HTTP request, including DNS lookup, TCP/TLS connection, request, and response headers/body. HTTP errors still record their measured latency; transport and timeout failures record an error with no artificial latency value.
+Only absolute `http://` and `https://` URLs are accepted.
 
-## Operational notes
+## Persistence and startup
 
-- Grafana’s database data source uses the same PostgreSQL instance and is provisioned on first start.
-- `config/endpoints.json` seeds missing endpoints whenever the pinger container starts. API/dashboard changes are persisted immediately in PostgreSQL and take precedence over entries with the same name.
-- Probe intervals are scheduled from the completion of the previous sweep; set `PING_INTERVAL_SECONDS` according to endpoint count and timeout budget.
-- `STATUS_REFRESH_SECONDS` controls how often the management page refreshes its displayed endpoint health (default: 5 seconds).
-- This reports latency from the Docker host/network where it runs—not user-device latency.
-- Data retention is intentionally not automatic. Add a retention policy appropriate to your storage requirements.
+PostgreSQL and Grafana data are stored in named Docker volumes. Normal restarts, rebuilds, and `docker compose down` retain history. Do **not** run `docker compose down -v` unless you intentionally want to erase stored data.
+
+All services use `restart: unless-stopped`. To run automatically on another Windows computer, enable Docker Desktop’s “Start Docker Desktop when you log in,” then start the stack once with `docker compose up --build -d`. For an unattended machine, create a Windows Task Scheduler task that runs the same command at system startup.
+
+Grafana provisioning is built into the local Grafana image rather than mounted from the host. This avoids the Windows `Access is denied` error that can occur when Docker bind-mounts the `grafana/provisioning` directory.
+
+## Useful commands
+
+```powershell
+# View running services
+docker compose ps
+
+# Follow probe-service logs
+docker compose logs -f pinger
+
+# Stop services, keeping all data
+docker compose down
+
+# Rebuild after source or dashboard changes
+docker compose up --build -d
+```
+
+## Notes
+
+- Results represent latency from the computer and network running Docker, not latency from every client viewing Grafana.
+- Probe sweeps run concurrently across enabled endpoints; the next sweep waits until the previous sweep is complete, then waits `PING_INTERVAL_SECONDS`.
+- There is no automatic retention policy. Plan disk capacity or add a retention process for long-running deployments.
