@@ -48,7 +48,7 @@ Use the endpoint manager to:
 - Move endpoints up or down; this also controls legend ordering.
 - Remove an endpoint from active probing while retaining its historical samples.
 
-The manager refreshes displayed health and latency every `STATUS_REFRESH_SECONDS` without overwriting in-progress name or URL edits. It includes a local clock and a link to the Grafana dashboard.
+The manager refreshes displayed health and latency every `STATUS_REFRESH_SECONDS` without overwriting in-progress name or URL edits. It includes a local clock and an **Open dashboard** link that follows the configured `GRAFANA_PORT`.
 
 ## Dashboard behavior
 
@@ -123,6 +123,32 @@ docker compose down
 # Rebuild after source or dashboard changes
 docker compose up --build -d
 ```
+
+## Troubleshooting
+
+### Grafana port 3000 is already allocated
+
+If Docker reports `Bind for 0.0.0.0:3000 failed: port is already allocated`, another application or container already owns port 3000. Either stop the old service if it is no longer needed, or choose a different Grafana host port.
+
+To inspect Docker containers and their port mappings:
+
+```powershell
+docker ps --format "table {{.Names}}\t{{.Ports}}"
+```
+
+To use port 3001 instead, set this in `.env`:
+
+```env
+GRAFANA_PORT=3001
+```
+
+Then apply it:
+
+```powershell
+docker compose up -d
+```
+
+The dashboard will then be at `http://localhost:3001/d/endpoint-latency/endpoint-latency`. The same approach works for an occupied API/manager port by changing `PINGER_PORT`.
 
 ## Notes
 

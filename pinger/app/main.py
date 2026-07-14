@@ -19,6 +19,7 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 PING_INTERVAL = float(os.getenv("PING_INTERVAL_SECONDS", "5"))
 TIMEOUT = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "10"))
 STATUS_REFRESH_SECONDS = max(1.0, float(os.getenv("STATUS_REFRESH_SECONDS", "5")))
+GRAFANA_PORT = os.getenv("GRAFANA_PORT", "3000")
 ENDPOINTS_FILE = os.getenv("ENDPOINTS_FILE", "")
 
 
@@ -172,7 +173,7 @@ async def manage_endpoints():
     return HTMLResponse("""<!doctype html><html><head><meta charset=\"utf-8\"><style>
 body{font:14px system-ui,sans-serif;margin:12px;color:#d8d9da;background:#181b1f}h3{margin:0 0 10px}.dashboard-link{float:right;color:#8ab8ff;text-decoration:none}.ok{color:#73bf69;font-weight:600}.warn{color:#ffb357;font-weight:600}.bad{color:#f2495c;font-weight:600}small{color:#aeb7c2}
 form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}input{background:#292d33;color:#d8d9da;border:1px solid #535b66;border-radius:3px;padding:7px;min-width:180px}button{background:#5794f2;color:#fff;border:0;border-radius:3px;padding:7px 11px;cursor:pointer}button.remove{background:#d44a3a}table{border-collapse:collapse;width:100%}td,th{padding:7px;text-align:left;border-top:1px solid #343a42}code{color:#8ab8ff}#message{min-height:18px;color:#73bf69}</style></head><body>
-<a class=\"dashboard-link\" href=\"http://localhost:3000/d/endpoint-latency/endpoint-latency\" target=\"_blank\" rel=\"noopener\">Open dashboard ↗</a><h3>Endpoint management</h3><form id=\"add\"><input id=\"name\" placeholder=\"Display name\" required><input id=\"url\" type=\"url\" placeholder=\"https://endpoint.example\" required><button>Add endpoint</button></form><div id=\"message\"></div><small id=\"refreshed\">Loading status…</small> <small id=\"clock\"></small><table><thead><tr><th>Name</th><th>URL</th><th>Latest ping</th><th>Enabled</th><th></th></tr></thead><tbody id=\"items\"></tbody></table>
+<a class=\"dashboard-link\" href=\"http://localhost:__GRAFANA_PORT__/d/endpoint-latency/endpoint-latency\" target=\"_blank\" rel=\"noopener\">Open dashboard ↗</a><h3>Endpoint management</h3><form id=\"add\"><input id=\"name\" placeholder=\"Display name\" required><input id=\"url\" type=\"url\" placeholder=\"https://endpoint.example\" required><button>Add endpoint</button></form><div id=\"message\"></div><small id=\"refreshed\">Loading status…</small> <small id=\"clock\"></small><table><thead><tr><th>Name</th><th>URL</th><th>Latest ping</th><th>Enabled</th><th></th></tr></thead><tbody id=\"items\"></tbody></table>
 <script>
 const api='/endpoints', items=document.querySelector('#items'), message=document.querySelector('#message'), refreshed=document.querySelector('#refreshed'), clock=document.querySelector('#clock'), refreshPeriodMs=__STATUS_REFRESH_MS__;
 const say=(text, bad=false)=>{message.textContent=text;message.style.color=bad?'#f2495c':'#73bf69'};
@@ -182,7 +183,7 @@ async function load(){try{const endpoints=await request(api);items.innerHTML='';
 async function refreshStatuses(){try{for(const e of await request(api)){const status=document.querySelector('[data-status="'+e.id+'"]'), latency=document.querySelector('[data-latency="'+e.id+'"]');if(status){const view=statusView(e);status.textContent=view.status;status.className=view.statusClass;latency.textContent=view.latency}}refreshed.textContent='Status refreshed '+new Date().toLocaleTimeString()+' (every '+(refreshPeriodMs/1000)+'s)'}catch(err){refreshed.textContent='Status refresh failed';console.warn('Status refresh failed',err)}}
 function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
 const updateClock=()=>clock.textContent='Local time: '+new Date().toLocaleTimeString();document.querySelector('#add').onsubmit=async e=>{e.preventDefault();try{await request(api,{method:'POST',body:JSON.stringify({name:document.querySelector('#name').value,url:document.querySelector('#url').value})});e.target.reset();say('Endpoint added and saved');load()}catch(err){say(err.message,true)}};load().then(refreshStatuses);updateClock();setInterval(updateClock,1000);setInterval(refreshStatuses,refreshPeriodMs);
-</script></body></html>""".replace("__STATUS_REFRESH_MS__", str(int(STATUS_REFRESH_SECONDS * 1000))), headers={"Cache-Control": "no-store"})
+</script></body></html>""".replace("__STATUS_REFRESH_MS__", str(int(STATUS_REFRESH_SECONDS * 1000))).replace("__GRAFANA_PORT__", GRAFANA_PORT), headers={"Cache-Control": "no-store"})
 
 
 @app.get("/health")
