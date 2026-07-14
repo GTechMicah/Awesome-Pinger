@@ -4,7 +4,12 @@ Pinger continuously measures HTTP(S) endpoint reachability and end-to-end reques
 
 ## What it measures
 
-This is an HTTP(S) probe, not an ICMP ping. Each sample measures the full request from the Docker host: DNS resolution, TCP/TLS connection, request, and response. A responding endpoint with an HTTP 404 is reachable, but is labeled **HTTP response**; a transport failure or timeout is labeled **Down**.
+Each endpoint can use one of two probe types:
+
+- **HTTP(S) request** measures the full request from the Docker host: DNS resolution, TCP/TLS connection, request, and response. A responding endpoint with an HTTP 404 is reachable, but is labeled **HTTP response**.
+- **ICMP ping** sends one network ping to a hostname or IP address and records the round-trip time. Use an IP address or hostname only—do not include `http://` or a path.
+
+A transport failure, ICMP failure, or timeout is labeled **Down**.
 
 ## Quick start
 
@@ -38,17 +43,29 @@ Grafana credentials come from `.env`.
 
 The config file **seeds missing endpoint names** on service startup. It never overwrites an existing endpoint with the same name, so edits made in the endpoint manager persist. Removing an entry from the config does not delete historical/user-managed endpoints from PostgreSQL. After editing this file, apply it with `docker compose up --build -d pinger`.
 
+For an ICMP default, use `"type": "icmp"` with a hostname or IP address:
+
+```json
+{
+  "name": "Local router",
+  "url": "192.168.1.1",
+  "type": "icmp",
+  "enabled": true
+}
+```
+
 ## Managing endpoints
 
 Use the endpoint manager to:
 
-- Add endpoints.
-- Edit endpoint names and URLs.
+- Add endpoints; **ICMP ping** is the default type for new endpoints.
+- Choose **HTTP(S) request** or **ICMP ping** for each endpoint.
+- Edit endpoint names and URLs/hosts.
 - Enable or disable probes.
 - Move endpoints up or down; this also controls legend ordering.
 - Remove an endpoint from active probing while retaining its historical samples.
 
-The manager refreshes displayed health and latency every `STATUS_REFRESH_SECONDS` without overwriting in-progress name or URL edits. It includes a local clock and an **Open dashboard** link that follows the configured `GRAFANA_PORT`.
+The manager uses one **Save all changes** button, so name, target, type, and enabled-state edits across multiple rows are saved together without row-level refreshes clearing other pending edits. Moving or removing an endpoint saves pending edits first. It refreshes displayed health and latency every `STATUS_REFRESH_SECONDS` without overwriting in-progress edits, and includes a local clock plus an **Open dashboard** link that follows the configured `GRAFANA_PORT`.
 
 ## Dashboard behavior
 
@@ -93,12 +110,12 @@ docker compose up -d
 | --- | --- | --- |
 | `GET` | `/endpoints` | List endpoints, latest status, and ordering |
 | `POST` | `/endpoints` | Add `{ "name": "...", "url": "https://..." }` |
-| `PATCH` | `/endpoints/{id}` | Update name, URL, or enabled state |
+| `PATCH` | `/endpoints/{id}` | Update name, URL/host, `probe_type` (`http` or `icmp`), or enabled state |
 | `POST` | `/endpoints/{id}/move` | Reorder with `{ "direction": "up" }` or `down` |
 | `DELETE` | `/endpoints/{id}` | Stop active probing while retaining history |
 | `GET` | `/health` | Service and database health |
 
-Only absolute `http://` and `https://` URLs are accepted.
+HTTP probes accept only absolute `http://` and `https://` URLs. ICMP probes accept hostnames or IP addresses.
 
 ## Persistence and startup
 
@@ -107,6 +124,16 @@ PostgreSQL and Grafana data are stored in named Docker volumes. Normal restarts,
 All services use `restart: unless-stopped`. To run automatically on another Windows computer, enable Docker Desktop’s “Start Docker Desktop when you log in,” then start the stack once with `docker compose up --build -d`. For an unattended machine, create a Windows Task Scheduler task that runs the same command at system startup.
 
 Grafana provisioning and the default endpoint config are built into local images rather than mounted from the host. This avoids Windows `Access is denied` errors that can occur when Docker bind-mounts `grafana/provisioning` or `config/endpoints.json`.
+
+### Upgrading an existing installation
+
+Pull or copy the updated project files, then rebuild and recreate the stack:
+
+```powershell
+docker compose up --build -d
+```
+
+The pinger automatically adds the `probe_type` database column and preserves all existing endpoints and history. Existing endpoints are assigned the HTTP probe type. The Docker service is granted the required `NET_RAW` capability and includes the standard `ping` tool for ICMP probes.
 
 ## Useful commands
 

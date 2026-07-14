@@ -14,7 +14,7 @@
     }
   ],
   "schemaVersion": 39,
-  "version": 15,
+  "version": 16,
   "panels": [
     {
       "id": 1,
@@ -23,7 +23,7 @@
       "datasource": { "type": "postgres", "uid": "pinger-postgres" },
       "targets": [{
         "format": "time_series",
-        "rawSql": "SELECT s.recorded_at AS time, s.latency_ms AS value, e.name || ' — ' || CASE WHEN s.status_code >= 500 THEN 'Server error (' || s.status_code || ')' WHEN s.status_code >= 400 THEN 'HTTP response (' || s.status_code || ')' ELSE 'Reached (' || COALESCE(s.status_code::text, 'unknown') || ')' END AS metric FROM ping_samples s JOIN endpoints e ON e.id = s.endpoint_id WHERE $__timeFilter(s.recorded_at) AND s.latency_ms IS NOT NULL ORDER BY 1, e.sort_order, e.name",
+        "rawSql": "SELECT s.recorded_at AS time, s.latency_ms AS value, e.name || ' — ' || CASE WHEN e.probe_type = 'icmp' THEN 'ICMP reached' WHEN s.status_code >= 500 THEN 'Server error (' || s.status_code || ')' WHEN s.status_code >= 400 THEN 'HTTP response (' || s.status_code || ')' ELSE 'Reached (' || COALESCE(s.status_code::text, 'unknown') || ')' END AS metric FROM ping_samples s JOIN endpoints e ON e.id = s.endpoint_id WHERE $__timeFilter(s.recorded_at) AND s.latency_ms IS NOT NULL ORDER BY 1, e.sort_order, e.name",
         "refId": "A"
       }, {
         "format": "time_series",
@@ -71,7 +71,7 @@
       "datasource": { "type": "postgres", "uid": "pinger-postgres" },
       "targets": [{
         "format": "table",
-        "rawSql": "SELECT e.name AS endpoint, CASE WHEN s.id IS NULL THEN 'No data' WHEN s.error IS NOT NULL THEN 'Down' WHEN s.status_code >= 500 THEN 'Server error' WHEN s.status_code >= 400 THEN 'HTTP response' ELSE 'Healthy' END AS health, s.latency_ms, s.status_code, s.recorded_at AS last_ping, s.error FROM endpoints e LEFT JOIN LATERAL (SELECT * FROM ping_samples WHERE endpoint_id=e.id ORDER BY recorded_at DESC LIMIT 1) s ON TRUE ORDER BY e.sort_order, e.name",
+        "rawSql": "SELECT e.name AS endpoint, e.probe_type AS probe_type, CASE WHEN s.id IS NULL THEN 'No data' WHEN s.error IS NOT NULL THEN 'Down' WHEN s.status_code >= 500 THEN 'Server error' WHEN s.status_code >= 400 THEN 'HTTP response' ELSE 'Healthy' END AS health, s.latency_ms, s.status_code, s.recorded_at AS last_ping, s.error FROM endpoints e LEFT JOIN LATERAL (SELECT * FROM ping_samples WHERE endpoint_id=e.id ORDER BY recorded_at DESC LIMIT 1) s ON TRUE ORDER BY e.sort_order, e.name",
         "refId": "A"
       }],
       "fieldConfig": { "defaults": { "custom": { "cellOptions": { "type": "auto" } } }, "overrides": [

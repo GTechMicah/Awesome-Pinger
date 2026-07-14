@@ -30,6 +30,8 @@ services:
         condition: service_healthy
     ports:
       - "${PINGER_PORT:-8080}:8080"
+    cap_add:
+      - NET_RAW
     restart: unless-stopped
 
   grafana:
