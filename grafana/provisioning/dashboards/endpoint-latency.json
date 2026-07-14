@@ -14,7 +14,7 @@
     }
   ],
   "schemaVersion": 39,
-  "version": 19,
+  "version": 20,
   "panels": [
     {
       "id": 1,
@@ -23,18 +23,10 @@
       "datasource": { "type": "postgres", "uid": "pinger-postgres" },
       "targets": [{
         "format": "time_series",
-        "rawSql": "SELECT s.recorded_at AS time, s.latency_ms AS value, e.name || ' — ' || CASE WHEN e.probe_type = 'icmp' THEN 'ICMP reached' WHEN s.status_code >= 500 THEN 'Server error (' || s.status_code || ')' WHEN s.status_code >= 400 THEN 'HTTP response (' || s.status_code || ')' ELSE 'Reached (' || COALESCE(s.status_code::text, 'unknown') || ')' END AS metric FROM ping_samples s JOIN endpoints e ON e.id = s.endpoint_id WHERE $__timeFilter(s.recorded_at) AND s.latency_ms IS NOT NULL ORDER BY 1, e.sort_order, e.name",
+        "rawSql": "SELECT s.recorded_at AS time, CASE WHEN s.error IS NOT NULL THEN -50.0 ELSE s.latency_ms END AS value, e.name AS metric FROM ping_samples s JOIN endpoints e ON e.id = s.endpoint_id WHERE $__timeFilter(s.recorded_at) ORDER BY 1, e.sort_order, e.name",
         "refId": "A"
-      }, {
-        "format": "time_series",
-        "rawSql": "SELECT s.recorded_at AS time, -50.0 AS value, e.name || ' — Down (not reached)' AS metric FROM ping_samples s JOIN endpoints e ON e.id = s.endpoint_id WHERE $__timeFilter(s.recorded_at) AND s.error IS NOT NULL ORDER BY 1, e.sort_order, e.name",
-        "refId": "C"
       }],
-      "fieldConfig": { "defaults": { "unit": "ms", "decimals": 2, "min": -100, "color": { "mode": "palette-classic" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0 }] }, "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "showPoints": "never", "fillOpacity": 0, "spanNulls": true, "thresholdsStyle": { "mode": "area" } } }, "overrides": [
-        { "matcher": { "id": "byRegexp", "options": " — Down \\(not reached\\)$" }, "properties": [
-          { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }, { "id": "custom.drawStyle", "value": "points" }, { "id": "custom.lineWidth", "value": 0 }, { "id": "custom.showPoints", "value": "always" }, { "id": "custom.pointSize", "value": 9 }
-        ] }
-      ] },
+      "fieldConfig": { "defaults": { "unit": "ms", "decimals": 2, "min": -100, "color": { "mode": "palette-classic" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0 }] }, "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "showPoints": "never", "fillOpacity": 0, "spanNulls": true, "thresholdsStyle": { "mode": "area" } } }, "overrides": [] },
       "options": { "tooltip": { "mode": "multi", "sort": "desc", "hideZeros": false }, "legend": { "displayMode": "list", "placement": "right", "showLegend": true } },
       "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 }
     },

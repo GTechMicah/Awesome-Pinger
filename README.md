@@ -74,10 +74,10 @@ The manager refreshes displayed health and latency every `STATUS_REFRESH_SECONDS
 ## Dashboard behavior
 
 - The main graph defaults to the last 15 minutes and refreshes every 5 seconds.
-- Successful probes display as continuous latency lines.
-- Transport failures appear as red markers in a reserved negative region; the negative values are visual indicators, not measured latency.
-- Hovering the graph shows latency, reachability, and HTTP status at that time, sorted from highest latency to lowest.
-- The right-side legend follows the saved endpoint-manager order.
+- Each endpoint displays as one continuous latency line.
+- Transport failures are plotted at `-50 ms` in the reserved negative region and connected to the surrounding successful points for that same endpoint; the negative value is a visual indicator, not measured latency.
+- Hovering the graph shows endpoint values at that time, sorted from highest latency to lowest.
+- The right-side legend follows the saved endpoint-manager order and shows endpoint names only.
 - The **Endpoint overview: latest probe, latency, and failures** table combines the newest probe (health, latency, status code, timestamp, and error) with minimum, average, maximum, successful-sample count, and failure count for every endpoint in the current dashboard time range. Transport/ICMP failures and HTTP 5xx responses count as failures; HTTP 4xx responses remain reachable measurements.
 
 Health colors:
