@@ -14,7 +14,7 @@
     }
   ],
   "schemaVersion": 39,
-  "version": 21,
+  "version": 22,
   "panels": [
     {
       "id": 1,
@@ -23,7 +23,7 @@
       "datasource": { "type": "postgres", "uid": "pinger-postgres" },
       "targets": [{
         "format": "time_series",
-        "rawSql": "SELECT s.recorded_at AS time, CASE WHEN s.error IS NOT NULL THEN -50.0 ELSE s.latency_ms END AS value, e.name AS metric FROM ping_samples s JOIN endpoints e ON e.id = s.endpoint_id WHERE $__timeFilter(s.recorded_at) ORDER BY 1, e.sort_order, e.name",
+        "rawSql": "SELECT date_trunc('second', s.recorded_at) AS time, CASE WHEN s.error IS NOT NULL THEN -50.0 ELSE s.latency_ms END AS value, e.name AS metric FROM ping_samples s JOIN endpoints e ON e.id = s.endpoint_id WHERE $__timeFilter(s.recorded_at) ORDER BY 1, e.sort_order, e.name",
         "refId": "A"
       }],
       "fieldConfig": { "defaults": { "unit": "ms", "decimals": 2, "min": -100, "mappings": [{ "type": "range", "options": { "from": -100, "to": -0.000001, "result": { "text": "Failed", "color": "red", "index": 0 } } }], "color": { "mode": "palette-classic" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0 }] }, "custom": { "drawStyle": "line", "lineInterpolation": "linear", "lineWidth": 2, "showPoints": "never", "fillOpacity": 0, "spanNulls": true, "thresholdsStyle": { "mode": "area" } } }, "overrides": [] },

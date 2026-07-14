@@ -112,19 +112,17 @@ class MoveRequest(BaseModel):
     direction: Literal["up", "down"]
 
 
-async def probe_http(endpoint: Endpoint, client: httpx.AsyncClient) -> PingSample:
+async def probe_http(endpoint: Endpoint, client: httpx.AsyncClient, recorded_at: datetime) -> PingSample:
     started = time.perf_counter_ns()
-    now = datetime.now(timezone.utc)
     try:
         response = await client.get(endpoint.url)
         latency_ms = (time.perf_counter_ns() - started) / 1_000_000
-        return PingSample(endpoint_id=endpoint.id, recorded_at=now, latency_ms=latency_ms, status_code=response.status_code)
+        return PingSample(endpoint_id=endpoint.id, recorded_at=recorded_at, latency_ms=latency_ms, status_code=response.status_code)
     except httpx.HTTPError as exc:
-        return PingSample(endpoint_id=endpoint.id, recorded_at=now, error=f"{type(exc).__name__}: {str(exc)[:500]}")
+        return PingSample(endpoint_id=endpoint.id, recorded_at=recorded_at, error=f"{type(exc).__name__}: {str(exc)[:500]}")
 
 
-async def probe_icmp(endpoint: Endpoint) -> PingSample:
-    now = datetime.now(timezone.utc)
+async def probe_icmp(endpoint: Endpoint, recorded_at: datetime) -> PingSample:
     parsed = urlparse(endpoint.url)
     target = parsed.hostname if parsed.scheme else endpoint.url
     try:
@@ -138,16 +136,16 @@ async def probe_icmp(endpoint: Endpoint) -> PingSample:
             match = re.search(r"time[=<]\s*([0-9]+(?:[.,][0-9]+)?)\s*ms", output, re.IGNORECASE)
             if match:
                 # Use ping's packet RTT, excluding Docker process/scheduling overhead.
-                return PingSample(endpoint_id=endpoint.id, recorded_at=now, latency_ms=float(match.group(1).replace(",", ".")))
-            return PingSample(endpoint_id=endpoint.id, recorded_at=now, error="ICMP reply received but ping did not report an RTT")
+                return PingSample(endpoint_id=endpoint.id, recorded_at=recorded_at, latency_ms=float(match.group(1).replace(",", ".")))
+            return PingSample(endpoint_id=endpoint.id, recorded_at=recorded_at, error="ICMP reply received but ping did not report an RTT")
         error = stderr.decode(errors="replace").strip()[:500] or "ICMP ping failed"
-        return PingSample(endpoint_id=endpoint.id, recorded_at=now, error=error)
+        return PingSample(endpoint_id=endpoint.id, recorded_at=recorded_at, error=error)
     except OSError as exc:
-        return PingSample(endpoint_id=endpoint.id, recorded_at=now, error=f"ICMP unavailable: {exc}")
+        return PingSample(endpoint_id=endpoint.id, recorded_at=recorded_at, error=f"ICMP unavailable: {exc}")
 
 
-async def probe(endpoint: Endpoint, client: httpx.AsyncClient) -> PingSample:
-    return await probe_icmp(endpoint) if endpoint.probe_type == "icmp" else await probe_http(endpoint, client)
+async def probe(endpoint: Endpoint, client: httpx.AsyncClient, recorded_at: datetime) -> PingSample:
+    return await probe_icmp(endpoint, recorded_at) if endpoint.probe_type == "icmp" else await probe_http(endpoint, client, recorded_at)
 
 
 async def probe_loop() -> None:
@@ -156,7 +154,8 @@ async def probe_loop() -> None:
         while True:
             async with Session() as session:
                 endpoints = (await session.scalars(select(Endpoint).where(Endpoint.enabled.is_(True)))).all()
-                samples = await asyncio.gather(*(probe(endpoint, client) for endpoint in endpoints))
+                cycle_started_at = datetime.now(timezone.utc).replace(microsecond=0)
+                samples = await asyncio.gather(*(probe(endpoint, client, cycle_started_at) for endpoint in endpoints))
                 if samples:
                     session.add_all(samples)
                     await session.commit()
