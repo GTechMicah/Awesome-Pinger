@@ -15,20 +15,20 @@ services:
     restart: unless-stopped
 
   pinger:
-    build: ./pinger
+    build:
+      context: .
+      dockerfile: pinger/Dockerfile
     environment:
       DATABASE_URL: postgresql+asyncpg://pinger:${POSTGRES_PASSWORD:-change-me-before-production}@db:5432/pinger
       PING_INTERVAL_SECONDS: ${PING_INTERVAL_SECONDS:-5}
       REQUEST_TIMEOUT_SECONDS: ${REQUEST_TIMEOUT_SECONDS:-10}
       STATUS_REFRESH_SECONDS: ${STATUS_REFRESH_SECONDS:-5}
-      ENDPOINTS_FILE: /config/endpoints.json
+      ENDPOINTS_FILE: /app/config/endpoints.json
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "${PINGER_PORT:-8080}:8080"
-    volumes:
-      - ./config/endpoints.json:/config/endpoints.json:ro
     restart: unless-stopped
 
   grafana:

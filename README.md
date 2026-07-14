@@ -10,7 +10,7 @@ This is an HTTP(S) probe, not an ICMP ping. Each sample measures the full reques
 
 1. Install Docker Desktop.
 2. Copy `.env.example` to `.env` and set strong passwords.
-3. Optionally edit `config/endpoints.json` to choose first-run defaults.
+3. Optionally edit `config/endpoints.json` to choose first-run defaults. The file is bundled into the pinger image, so edits require a rebuild.
 4. Start the stack:
 
    ```powershell
@@ -36,7 +36,7 @@ Grafana credentials come from `.env`.
 - Mozilla connectivity: `https://detectportal.firefox.com/success.txt`
 - Microsoft connectivity: `http://www.msftconnecttest.com/connecttest.txt`
 
-The config file **seeds missing endpoint names** on service startup. It never overwrites an existing endpoint with the same name, so edits made in the endpoint manager persist. Removing an entry from the config does not delete historical/user-managed endpoints from PostgreSQL.
+The config file **seeds missing endpoint names** on service startup. It never overwrites an existing endpoint with the same name, so edits made in the endpoint manager persist. Removing an entry from the config does not delete historical/user-managed endpoints from PostgreSQL. After editing this file, apply it with `docker compose up --build -d pinger`.
 
 ## Managing endpoints
 
@@ -106,7 +106,7 @@ PostgreSQL and Grafana data are stored in named Docker volumes. Normal restarts,
 
 All services use `restart: unless-stopped`. To run automatically on another Windows computer, enable Docker Desktop’s “Start Docker Desktop when you log in,” then start the stack once with `docker compose up --build -d`. For an unattended machine, create a Windows Task Scheduler task that runs the same command at system startup.
 
-Grafana provisioning is built into the local Grafana image rather than mounted from the host. This avoids the Windows `Access is denied` error that can occur when Docker bind-mounts the `grafana/provisioning` directory.
+Grafana provisioning and the default endpoint config are built into local images rather than mounted from the host. This avoids Windows `Access is denied` errors that can occur when Docker bind-mounts `grafana/provisioning` or `config/endpoints.json`.
 
 ## Useful commands
 
