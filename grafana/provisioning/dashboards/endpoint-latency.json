@@ -14,7 +14,7 @@
     }
   ],
   "schemaVersion": 39,
-  "version": 16,
+  "version": 19,
   "panels": [
     {
       "id": 1,
@@ -67,11 +67,12 @@
     {
       "id": 4,
       "type": "table",
-      "title": "Latest probe from every endpoint",
+      "title": "Endpoint overview: latest probe, latency, and failures",
+      "description": "Latest probe details plus selected-range latency statistics. HTTP 5xx responses and transport/ICMP failures count as failures; HTTP 4xx responses remain reachable measurements.",
       "datasource": { "type": "postgres", "uid": "pinger-postgres" },
       "targets": [{
         "format": "table",
-        "rawSql": "SELECT e.name AS endpoint, e.probe_type AS probe_type, CASE WHEN s.id IS NULL THEN 'No data' WHEN s.error IS NOT NULL THEN 'Down' WHEN s.status_code >= 500 THEN 'Server error' WHEN s.status_code >= 400 THEN 'HTTP response' ELSE 'Healthy' END AS health, s.latency_ms, s.status_code, s.recorded_at AS last_ping, s.error FROM endpoints e LEFT JOIN LATERAL (SELECT * FROM ping_samples WHERE endpoint_id=e.id ORDER BY recorded_at DESC LIMIT 1) s ON TRUE ORDER BY e.sort_order, e.name",
+        "rawSql": "SELECT e.name AS endpoint, e.probe_type AS probe_type, CASE WHEN latest.id IS NULL THEN 'No data' WHEN latest.error IS NOT NULL THEN 'Down' WHEN latest.status_code >= 500 THEN 'Server error' WHEN latest.status_code >= 400 THEN 'HTTP response' ELSE 'Healthy' END AS health, latest.latency_ms AS latest_latency_ms, latest.status_code, latest.recorded_at AS last_ping, latest.error, range.successful_samples, range.min_ms, range.avg_ms, range.max_ms, range.failures FROM endpoints e LEFT JOIN LATERAL (SELECT * FROM ping_samples WHERE endpoint_id=e.id ORDER BY recorded_at DESC LIMIT 1) latest ON TRUE LEFT JOIN LATERAL (SELECT count(id) FILTER (WHERE latency_ms IS NOT NULL) AS successful_samples, round(min(latency_ms)::numeric, 2) AS min_ms, round(avg(latency_ms)::numeric, 2) AS avg_ms, round(max(latency_ms)::numeric, 2) AS max_ms, count(id) FILTER (WHERE error IS NOT NULL OR status_code >= 500) AS failures FROM ping_samples WHERE endpoint_id=e.id AND $__timeFilter(recorded_at)) range ON TRUE ORDER BY e.sort_order, e.name",
         "refId": "A"
       }],
       "fieldConfig": { "defaults": { "custom": { "cellOptions": { "type": "auto" } } }, "overrides": [
@@ -79,9 +80,13 @@
           { "id": "mappings", "value": [ { "type": "value", "options": { "Healthy": { "color": "green", "index": 0, "text": "Healthy" }, "HTTP response": { "color": "orange", "index": 1, "text": "HTTP response" }, "Server error": { "color": "red", "index": 2, "text": "Server error" }, "Down": { "color": "red", "index": 3, "text": "Down" }, "No data": { "color": "gray", "index": 4, "text": "No data" } } } ] },
           { "id": "custom.cellOptions", "value": { "type": "color-background" } }
         ] },
-        { "matcher": { "id": "byName", "options": "latency_ms" }, "properties": [ { "id": "unit", "value": "ms" }, { "id": "decimals", "value": 2 } ] }
+        { "matcher": { "id": "byRegexp", "options": "_(ms)$" }, "properties": [ { "id": "unit", "value": "ms" }, { "id": "decimals", "value": 2 } ] },
+        { "matcher": { "id": "byName", "options": "failures" }, "properties": [
+          { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } },
+          { "id": "custom.cellOptions", "value": { "type": "color-background" } }
+        ] }
       ] },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 18 }
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 18 }
     }
   ]
 }

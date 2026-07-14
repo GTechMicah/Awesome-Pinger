@@ -69,7 +69,7 @@ The manager uses one **Save all changes** button, so name, target, type, and ena
 
 The manager validates names and targets before saving. Invalid fields receive a red outline and a warning icon with a hoverable explanation; attempting to save also shows the same message at the top. Validation covers required fields, duplicate names, valid HTTP(S) URL schemes, and valid ICMP hosts/URLs. Clearing both fields in the Add endpoint form clears its pending validation warnings.
 
-The manager refreshes displayed health and latency every `STATUS_REFRESH_SECONDS` without overwriting in-progress edits, and includes a local clock plus an **Open dashboard** link that follows the configured `GRAFANA_PORT`.
+The manager refreshes displayed health and latency every `STATUS_REFRESH_SECONDS` without overwriting in-progress edits. Its status, local-clock, and **Stats range** controls are grouped in a toolbar above the endpoint table. The range selector supports 15 minutes, 1 hour, 24 hours, 7 days, and **All time**, with separate per-endpoint **Min**, **Avg**, **Max**, and **Failures** columns for the chosen range. The all-time calculation uses an indexed aggregate query and is suitable for the normal monitoring history retained by this stack. It also includes an **Open dashboard** link that follows the configured `GRAFANA_PORT`.
 
 ## Dashboard behavior
 
@@ -78,7 +78,7 @@ The manager refreshes displayed health and latency every `STATUS_REFRESH_SECONDS
 - Transport failures appear as red markers in a reserved negative region; the negative values are visual indicators, not measured latency.
 - Hovering the graph shows latency, reachability, and HTTP status at that time, sorted from highest latency to lowest.
 - The right-side legend follows the saved endpoint-manager order.
-- The **Latest probe from every endpoint** table shows the newest probe, latency, status code, timestamp, and error for each endpoint.
+- The **Endpoint overview: latest probe, latency, and failures** table combines the newest probe (health, latency, status code, timestamp, and error) with minimum, average, maximum, successful-sample count, and failure count for every endpoint in the current dashboard time range. Transport/ICMP failures and HTTP 5xx responses count as failures; HTTP 4xx responses remain reachable measurements.
 
 Health colors:
 
@@ -113,6 +113,7 @@ docker compose up -d
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/endpoints` | List endpoints, latest status, and ordering |
+| `GET` | `/endpoint-stats?window=15m` | Per-endpoint min/avg/max and failure counts; supported windows: `15m`, `1h`, `24h`, `7d`, `all` |
 | `POST` | `/endpoints` | Add `{ "name": "...", "url": "https://..." }` |
 | `PATCH` | `/endpoints/{id}` | Update name, URL/host, `probe_type` (`http` or `icmp`), or enabled state |
 | `POST` | `/endpoints/{id}/move` | Reorder with `{ "direction": "up" }` or `down` |
