@@ -99,6 +99,7 @@ Health colors:
 | `PING_INTERVAL_SECONDS` | `5` | Delay after each completed probe sweep |
 | `REQUEST_TIMEOUT_SECONDS` | `10` | Per-request HTTP timeout |
 | `STATUS_REFRESH_SECONDS` | `5` | Endpoint-manager health refresh interval |
+| `DATA_RETENTION_DAYS` | `30` | Keep raw probe samples for this many days; set `0` to disable automatic cleanup |
 | `PINGER_PORT` | `8080` | Host port for the API and manager |
 | `GRAFANA_PORT` | `3000` | Host port for Grafana |
 
@@ -126,7 +127,36 @@ HTTP probes accept only absolute `http://` and `https://` URLs. ICMP probes acce
 
 PostgreSQL and Grafana data are stored in named Docker volumes. Normal restarts, rebuilds, and `docker compose down` retain history. Do **not** run `docker compose down -v` unless you intentionally want to erase stored data.
 
-All services use `restart: unless-stopped`. To run automatically on another Windows computer, enable Docker Desktop’s “Start Docker Desktop when you log in,” then start the stack once with `docker compose up --build -d`. For an unattended machine, create a Windows Task Scheduler task that runs the same command at system startup.
+### Raw-sample retention
+
+To keep the database from growing without limit, Pinger keeps raw probe samples for **30 days** by default. A background cleanup runs once per day and deletes older samples in small batches, allowing PostgreSQL to reuse the storage without interrupting normal probing. Endpoint definitions, Grafana configuration, and samples within the selected retention period are unaffected.
+
+Set `DATA_RETENTION_DAYS` in `.env` to a longer or shorter period, then apply it with `docker compose up -d`. Set it to `0` only if you intentionally want unlimited raw-history retention. The dashboard's **All time** range means all retained data, not data that has already expired.
+
+All services use `restart: unless-stopped`. Once the stack has been started successfully, Docker restarts it whenever the Docker engine starts (unless the containers were explicitly stopped).
+
+### Run at startup on a Docker host
+
+1. Start the stack once:
+
+   ```bash
+   docker compose up --build -d
+   ```
+
+2. Configure the host's Docker engine to start at boot. On a standard Linux Docker host:
+
+   ```bash
+   sudo systemctl enable --now docker
+   ```
+
+No startup script is needed after that: the Compose restart policies bring PostgreSQL, Pinger, and Grafana back automatically.
+
+### Windows and Windows Server
+
+- **Windows 10/11:** use Docker Desktop with Linux containers and enable its **Start Docker Desktop when you log in** setting. Start the stack once with the command above.
+- **Windows Server:** Docker Desktop is not supported on Windows Server, and the native Windows Server Docker engine runs Windows containers only. This stack uses Linux images (PostgreSQL, Grafana, and the Pinger image), so run it in a Linux VM on the server—for example, an Ubuntu VM configured to auto-start in Hyper-V—or deploy it to another Linux Docker host. Enable the Docker service inside that Linux host as shown above; the stack then starts automatically whenever the VM/host boots.
+
+This project therefore works on Docker hosts that can run Linux containers, including Linux servers, Linux VMs, Docker Desktop on Windows/macOS, and managed Linux container hosts. It cannot run unchanged against a Windows-containers-only Docker engine.
 
 Grafana provisioning and the default endpoint config are built into local images rather than mounted from the host. This avoids Windows `Access is denied` errors that can occur when Docker bind-mounts `grafana/provisioning` or `config/endpoints.json`.
 

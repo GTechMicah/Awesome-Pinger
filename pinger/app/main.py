@@ -21,6 +21,8 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 PING_INTERVAL = float(os.getenv("PING_INTERVAL_SECONDS", "5"))
 TIMEOUT = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "10"))
 STATUS_REFRESH_SECONDS = max(1.0, float(os.getenv("STATUS_REFRESH_SECONDS", "5")))
+DATA_RETENTION_DAYS = max(0, int(os.getenv("DATA_RETENTION_DAYS", "30")))
+RETENTION_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60
 GRAFANA_PORT = os.getenv("GRAFANA_PORT", "3000")
 STATS_WINDOWS = {"15m": timedelta(minutes=15), "1h": timedelta(hours=1), "24h": timedelta(hours=24), "7d": timedelta(days=7)}
 ENDPOINTS_FILE = os.getenv("ENDPOINTS_FILE", "")
@@ -162,6 +164,37 @@ async def probe_loop() -> None:
             await asyncio.sleep(PING_INTERVAL)
 
 
+async def purge_expired_samples() -> int:
+    """Delete expired samples in small commits so retention cannot monopolize the database."""
+    if DATA_RETENTION_DAYS == 0:
+        return 0
+    cutoff = datetime.now(timezone.utc) - timedelta(days=DATA_RETENTION_DAYS)
+    deleted_total = 0
+    while True:
+        async with Session.begin() as session:
+            result = await session.execute(text("""
+                WITH expired AS (
+                    SELECT id FROM ping_samples
+                    WHERE recorded_at < :cutoff
+                    ORDER BY recorded_at
+                    LIMIT 10000
+                )
+                DELETE FROM ping_samples
+                WHERE id IN (SELECT id FROM expired)
+            """), {"cutoff": cutoff})
+        deleted = result.rowcount or 0
+        deleted_total += deleted
+        if deleted < 10000:
+            return deleted_total
+        await asyncio.sleep(0)
+
+
+async def retention_loop() -> None:
+    while True:
+        await purge_expired_samples()
+        await asyncio.sleep(RETENTION_CLEANUP_INTERVAL_SECONDS)
+
+
 async def seed_endpoints() -> None:
     """Seed missing endpoints from an optional JSON config file during startup."""
     if not ENDPOINTS_FILE:
@@ -196,15 +229,19 @@ async def lifespan(_: FastAPI):
         await connection.execute(text("ALTER TABLE endpoints ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0"))
         await connection.execute(text("ALTER TABLE endpoints ADD COLUMN IF NOT EXISTS probe_type VARCHAR(8) NOT NULL DEFAULT 'http'"))
         await connection.execute(text("UPDATE endpoints SET sort_order = id WHERE sort_order = 0"))
+        await connection.execute(text("CREATE INDEX IF NOT EXISTS ix_ping_samples_recorded_at ON ping_samples (recorded_at)"))
         await connection.execute(text("CREATE INDEX IF NOT EXISTS ix_ping_samples_endpoint_recorded ON ping_samples (endpoint_id, recorded_at DESC)"))
     await seed_endpoints()
-    task = asyncio.create_task(probe_loop())
+    probe_task = asyncio.create_task(probe_loop())
+    retention_task = asyncio.create_task(retention_loop())
     yield
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    for task in (probe_task, retention_task):
+        task.cancel()
+    for task in (probe_task, retention_task):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     await engine.dispose()
 
 
